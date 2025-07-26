@@ -8,17 +8,25 @@ const { query } = require('../config/database');
 // @desc    Add a new device (Admin only)
 // @access  Private (Admin)
 router.post('/', auth, authorize('admin'), async (req, res) => {
-  const { serial_number, model } = req.body;
+  const { serial_number, device_type_id } = req.body;
 
   try {
+    // Check if device type exists and get its details
+    const deviceType = await query('SELECT device_name, manufacturer, device_model, amount FROM device_types WHERE id = $1', [device_type_id]);
+    if (deviceType.rows.length === 0) {
+      return res.status(400).json({ msg: 'Invalid device type ID' });
+    }
+
+    const { device_name, manufacturer, device_model, amount } = deviceType.rows[0];
+
     let device = await query('SELECT * FROM devices WHERE serial_number = $1', [serial_number]);
     if (device.rows.length > 0) {
       return res.status(400).json({ msg: 'Device with this serial number already exists' });
     }
 
     const newDevice = await query(
-      'INSERT INTO devices (serial_number, model, status) VALUES ($1, $2, $3) RETURNING *;',
-      [serial_number, model, 'pending_approval'] // Devices are pending approval by default
+      'INSERT INTO devices (serial_number, model, price, device_type_id, status) VALUES ($1, $2, $3, $4, $5) RETURNING *;',
+      [serial_number, device_model, amount, device_type_id, 'pending_approval']
     );
     res.json({ msg: 'Device added successfully, pending approval', device: newDevice.rows[0] });
   } catch (err) {

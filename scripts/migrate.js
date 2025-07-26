@@ -52,6 +52,7 @@ async function migrate() {
         assigned_to UUID REFERENCES users(id) ON DELETE SET NULL, -- Customer ID
         assigned_by UUID REFERENCES users(id) ON DELETE SET NULL, -- Agent ID
         price DECIMAL(10, 2), -- Price of the device
+        device_type_id UUID REFERENCES device_types(id) ON DELETE SET NULL, -- New column for device type
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -135,6 +136,7 @@ async function migrate() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMP;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS loan_id UUID REFERENCES loans(id) ON DELETE SET NULL;`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_type_id UUID REFERENCES device_types(id) ON DELETE SET NULL;`);
 
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
 
