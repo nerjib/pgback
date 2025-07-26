@@ -139,6 +139,8 @@ async function migrate() {
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_type_id UUID REFERENCES device_types(id) ON DELETE SET NULL;`);
 
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_number VARCHAR(255) UNIQUE;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS credit_score INTEGER;`);
 
 
     console.log('Table "users" created or already exists.');
