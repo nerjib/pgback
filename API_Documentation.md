@@ -658,52 +658,129 @@ This document provides a comprehensive overview of the API endpoints for the Pay
 
 ---
 
-## 9. Inventory Endpoints (`/api/inventory`)
+---
 
-### 9.1. Get Devices Assigned by Specific Agent
-- **Route:** `GET /api/inventory/agent/:agentId`
-- **Description:** Retrieves a list of devices assigned by a particular agent.
+## 10. Device Type Endpoints (`/api/device-types`)
+
+### 10.1. Add New Device Type
+- **Route:** `POST /api/device-types`
+- **Description:** Adds a new device type to the system.
 - **Access:** Private (Admin only)
 - **Headers:** `x-auth-token: <JWT_TOKEN>`
-- **URL Parameters:**
-  - `agentId`: The UUID of the agent.
+- **Request Body:**
+  ```json
+  {
+    "device_name": "Solar Home System",
+    "manufacturer": "Bright Solar",
+    "device_model": "SHS-50W",
+    "amount": 25000.00
+  }
+  ```
+- **Response Sample (Success - 200 OK):**
+  ```json
+  {
+    "msg": "Device type added successfully",
+    "deviceType": {
+      "id": "dt1e2f3a4-b5c6-7890-1234-567890abcdef",
+      "device_name": "Solar Home System",
+      "manufacturer": "Bright Solar",
+      "device_model": "SHS-50W",
+      "amount": "25000.00",
+      "created_at": "2025-07-26T14:00:00.000Z",
+      "updated_at": "2025-07-26T14:00:00.000Z"
+    }
+  }
+  ```
+- **Response Sample (Error - 400 Bad Request):**
+  ```json
+  {
+    "msg": "Device type with this model already exists"
+  }
+  ```
+
+### 10.2. Get All Device Types
+- **Route:** `GET /api/device-types`
+- **Description:** Retrieves a list of all device types in the system.
+- **Access:** Private (Admin, Agent)
+- **Headers:** `x-auth-token: <JWT_TOKEN>`
 - **Response Sample (Success - 200 OK):**
   ```json
   [
     {
-      "id": "d1e2f3a4-b5c6-7890-1234-567890abcdef",
-      "serial_number": "DEV-001",
-      "model": "Model X",
-      "status": "assigned",
-      "assigned_to": "c1d2e3f4-a5b6-7890-1234-567890abcdef",
-      "assigned_by": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
-      "price": "150.00",
-      "created_at": "2025-07-26T10:00:00.000Z",
-      "updated_at": "2025-07-26T10:30:00.000Z"
+      "id": "dt1e2f3a4-b5c6-7890-1234-567890abcdef",
+      "device_name": "Solar Home System",
+      "manufacturer": "Bright Solar",
+      "device_model": "SHS-50W",
+      "amount": "25000.00",
+      "created_at": "2025-07-26T14:00:00.000Z",
+      "updated_at": "2025-07-26T14:00:00.000Z"
     }
   ]
   ```
 
-### 9.2. Get Devices by Status
-- **Route:** `GET /api/inventory/status/:status`
-- **Description:** Retrieves a list of devices based on their current status.
+### 10.3. Update Device Type
+- **Route:** `PUT /api/device-types/:id`
+- **Description:** Updates an existing device type.
 - **Access:** Private (Admin only)
 - **Headers:** `x-auth-token: <JWT_TOKEN>`
 - **URL Parameters:**
-  - `status`: The status of the devices (e.g., `available`, `assigned`, `faulty`, `pending_approval`).
+  - `id`: The UUID of the device type.
+- **Request Body:**
+  ```json
+  {
+    "device_name": "Updated Solar Home System",
+    "manufacturer": "Bright Solar Inc.",
+    "device_model": "SHS-50W-V2",
+    "amount": 27000.00
+  }
+  ```
 - **Response Sample (Success - 200 OK):**
   ```json
-  [
-    {
-      "id": "g1h2i3j4-k5l6-7890-1234-567890abcdef",
-      "serial_number": "DEV-002",
-      "model": "Solar Lamp Pro",
-      "status": "available",
-      "assigned_to": null,
-      "assigned_by": null,
-      "price": "150.00",
-      "created_at": "2025-07-26T11:00:00.000Z",
-      "updated_at": "2025-07-26T11:05:00.000Z"
+  {
+    "msg": "Device type updated successfully",
+    "deviceType": {
+      "id": "dt1e2f3a4-b5c6-7890-1234-567890abcdef",
+      "device_name": "Updated Solar Home System",
+      "manufacturer": "Bright Solar Inc.",
+      "device_model": "SHS-50W-V2",
+      "amount": "27000.00",
+      "created_at": "2025-07-26T14:00:00.000Z",
+      "updated_at": "2025-07-26T14:15:00.000Z"
     }
-  ]
+  }
+  ```
+- **Response Sample (Error - 404 Not Found):**
+  ```json
+  {
+    "msg": "Device type not found"
+  }
+  ```
+
+### 10.4. Delete Device Type
+- **Route:** `DELETE /api/device-types/:id`
+- **Description:** Deletes a device type from the system.
+- **Access:** Private (Admin only)
+- **Headers:** `x-auth-token: <JWT_TOKEN>`
+- **URL Parameters:**
+  - `id`: The UUID of the device type.
+- **Response Sample (Success - 200 OK):**
+  ```json
+  {
+    "msg": "Device type deleted successfully",
+    "deviceType": {
+      "id": "dt1e2f3a4-b5c6-7890-1234-567890abcdef",
+      "device_name": "Solar Home System",
+      "manufacturer": "Bright Solar",
+      "device_model": "SHS-50W",
+      "amount": "25000.00",
+      "created_at": "2025-07-26T14:00:00.000Z",
+      "updated_at": "2025-07-26T14:00:00.000Z"
+    }
+  }
+  ```
+- **Response Sample (Error - 404 Not Found):**
+  ```json
+  {
+    "msg": "Device type not found"
+  }
   ```

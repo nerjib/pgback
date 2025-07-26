@@ -97,6 +97,20 @@ async function migrate() {
     `);
     console.log('Table "loans" created or already exists.');
 
+    // Device Types table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS device_types (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        device_name VARCHAR(255) NOT NULL,
+        manufacturer VARCHAR(255),
+        device_model VARCHAR(255) UNIQUE NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "device_types" created or already exists.');
+
     // Tokens table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tokens (
