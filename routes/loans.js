@@ -17,7 +17,8 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
     }
 
     // Check if customer and device exist
-    const customer = await query('SELECT id FROM users WHERE id = $1 AND role = customer', [customer_id]);
+    const customer = await query(`SELECT id FROM users WHERE id = $1 AND role= $2`, [customer_id, 'customer']);
+    // console.log(customer);
     if (customer.rows.length === 0) {
       return res.status(404).json({ msg: 'Customer not found' });
     }

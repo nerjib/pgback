@@ -12,6 +12,7 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
     const customers = await query(`
       SELECT
         u.id,
+        u.role,
         u.username AS name,
         u.email,
         u.phone_number AS phone,
