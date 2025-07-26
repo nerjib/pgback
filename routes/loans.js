@@ -82,4 +82,41 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+// @route   GET api/loans/customer/:customerId
+// @desc    Get all loans for a specific customer
+// @access  Private (Admin, Agent, Customer - can only view their own loans)
+router.get('/customer/:customerId', auth, async (req, res) => {
+  const { customerId } = req.params;
+
+  try {
+    // Authorize: Admin and Agent can view any customer's loans, Customer can only view their own loans
+    if (req.user.role === 'customer' && req.user.id !== customerId) {
+      return res.status(403).json({ msg: 'Access denied: You can only view your own loans.' });
+    }
+
+    const loans = await query(`
+      SELECT
+        l.id,
+        l.total_amount AS "totalAmount",
+        l.amount_paid AS "amountPaid",
+        l.balance AS "remainingAmount",
+        l.status,
+        l.next_payment_date AS "nextPaymentDate",
+        dt.device_name AS "deviceType",
+        d.serial_number AS "deviceId",
+        (l.amount_paid / l.total_amount) * 100 AS progress
+      FROM loans l
+      JOIN devices d ON l.device_id = d.id
+      JOIN device_types dt ON d.device_type_id = dt.id
+      WHERE l.customer_id = $1
+      ORDER BY l.next_payment_date ASC
+    `, [customerId]);
+
+    res.json(loans.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 module.exports = router;
