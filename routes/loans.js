@@ -23,9 +23,13 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
       return res.status(404).json({ msg: 'Customer not found' });
     }
 
-    const device = await query('SELECT id FROM devices WHERE id = $1', [device_id]);
+    const device = await query('SELECT id, status FROM devices WHERE id = $1', [device_id]);
     if (device.rows.length === 0) {
       return res.status(404).json({ msg: 'Device not found' });
+    }
+
+    if (device.rows[0].status !== 'available') {
+      return res.status(400).json({ msg: 'Device is not available for assignment. Current status: ' + device.rows[0].status });
     }
 
     const total_amount = device_price - down_payment;
@@ -33,9 +37,11 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
     const next_payment_date = new Date();
     next_payment_date.setMonth(next_payment_date.getMonth() + 1); // Next month
 
+    const loanStatus = req.user.role === 'admin' ? 'active' : 'pending'; // Determine status based on user role
+
     const newLoan = await query(
-      'INSERT INTO loans (customer_id, device_id, total_amount, amount_paid, balance, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *;',
-      [customer_id, device_id, total_amount, down_payment, total_amount, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id]
+      'INSERT INTO loans (customer_id, device_id, total_amount, amount_paid, balance, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *;',
+      [customer_id, device_id, total_amount, down_payment, total_amount, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id, loanStatus]
     );
 
     res.json({ msg: 'Loan created successfully', loan: newLoan.rows[0] });
@@ -77,14 +83,65 @@ router.get('/:id', auth, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const loan = await query('SELECT * FROM loans WHERE id = $1', [id]);
+    const loan = await query(`
+      SELECT
+        l.id AS loan_id,
+        l.total_amount AS "totalAmount",
+        l.amount_paid AS "paidAmount",
+        l.balance AS "remainingAmount",
+        l.status,
+        l.start_date AS "startDate",
+        l.end_date AS "endDate",
+        l.next_payment_date AS "nextPaymentDate",
+        l.monthly_payment AS "monthlyPayment",
+        l.down_payment AS "downPayment",
+        l.term_months AS "termMonths",
+        l.guarantor_details AS "guarantorDetails",
+        (l.amount_paid / l.total_amount) * 100 AS progress,
+        json_build_object(
+          'id', c.id,
+          'name', c.username,
+          'phone', c.phone_number,
+          'email', c.email,
+          'location', c.state,
+          'idNumber', c.id_number,
+          'creditScore', c.credit_score
+        ) AS customer,
+        json_build_object(
+          'id', d.id,
+          'serialNumber', d.serial_number,
+          'type', dt.device_name,
+          'model', dt.device_model,
+          'status', d.status
+        ) AS device,
+        json_build_object(
+          'id', a.id,
+          'username', a.username,
+          'email', a.email
+        ) AS agent,
+        (SELECT json_agg(json_build_object(
+          'id', p.id,
+          'date', p.payment_date,
+          'amount', p.amount,
+          'method', p.payment_method,
+          'reference', p.transaction_id,
+          'status', p.status,
+          'lateFee', 0 -- Placeholder for now
+        ) ORDER BY p.payment_date DESC) FROM payments p WHERE p.loan_id = l.id) AS "paymentHistory"
+      FROM loans l
+      JOIN users c ON l.customer_id = c.id
+      JOIN devices d ON l.device_id = d.id
+      JOIN device_types dt ON d.device_type_id = dt.id
+      LEFT JOIN users a ON l.agent_id = a.id
+      WHERE l.id = $1
+    `, [id]);
 
     if (loan.rows.length === 0) {
       return res.status(404).json({ msg: 'Loan not found' });
     }
 
     // Authorize: Admin can view any loan, Agent can view any loan, Customer can only view their own loan
-    if (req.user.role === 'customer' && loan.rows[0].customer_id !== req.user.id) {
+    if (req.user.role === 'customer' && loan.rows[0].customer.id !== req.user.id) {
       return res.status(403).json({ msg: 'Access denied: You can only view your own loans.' });
     }
 
@@ -126,6 +183,77 @@ router.get('/customer/:customerId', auth, async (req, res) => {
     `, [customerId]);
 
     res.json(loans.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   PUT api/loans/:id
+// @desc    Update loan information
+// @access  Private (Admin, Agent)
+router.put('/:id', auth, authorize('admin', 'agent'), async (req, res) => {
+  const { id } = req.params;
+  let { total_amount, term_months, status, next_payment_date, guarantor_details } = req.body;
+
+  try {
+    const loanResult = await query('SELECT total_amount, term_months FROM loans WHERE id = $1', [id]);
+    if (loanResult.rows.length === 0) {
+      return res.status(404).json({ msg: 'Loan not found' });
+    }
+
+    const existingLoan = loanResult.rows[0];
+
+    // Use existing values if not provided in the request
+    total_amount = total_amount !== undefined ? total_amount : existingLoan.total_amount;
+    term_months = term_months !== undefined ? term_months : existingLoan.term_months;
+
+    // Recalculate monthly_payment
+    const monthly_payment = total_amount / term_months;
+
+    const updatedLoan = await query(
+      `UPDATE loans SET
+        total_amount = COALESCE($1, total_amount),
+        term_months = COALESCE($2, term_months),
+        monthly_payment = $3,
+        status = COALESCE($4, status),
+        next_payment_date = COALESCE($5, next_payment_date),
+        guarantor_details = COALESCE($6, guarantor_details),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $7 RETURNING *`,
+      [total_amount, term_months, monthly_payment, status, next_payment_date, guarantor_details, id]
+    );
+
+    res.json({ msg: 'Loan updated successfully', loan: updatedLoan.rows[0] });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   PUT api/loans/:id/approve
+// @desc    Approve a pending loan (Admin only)
+// @access  Private (Admin)
+router.put('/:id/approve', auth, authorize('admin'), async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const loan = await query('SELECT id, status FROM loans WHERE id = $1', [id]);
+
+    if (loan.rows.length === 0) {
+      return res.status(404).json({ msg: 'Loan not found' });
+    }
+
+    if (loan.rows[0].status !== 'pending') {
+      return res.status(400).json({ msg: 'Loan is not pending approval. Current status: ' + loan.rows[0].status });
+    }
+
+    const approvedLoan = await query(
+      'UPDATE loans SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;',
+      ['active', id]
+    );
+
+    res.json({ msg: 'Loan approved successfully', loan: approvedLoan.rows[0] });
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
