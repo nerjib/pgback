@@ -4,6 +4,32 @@ const auth = require('../middleware/auth');
 const authorize = require('../middleware/authorization');
 const { query } = require('../config/database');
 
+// @route   GET api/agents
+// @desc    Get all agents information
+// @access  Private (Admin only)
+router.get('/', auth, authorize('admin'), async (req, res) => {
+  try {
+    const agents = await query(`
+      SELECT 
+        u.id, 
+        u.username AS name, 
+        u.email, 
+        u.phone_number AS phone, 
+        u.state AS region, 
+        u.status,
+        (SELECT COUNT(*) FROM devices WHERE assigned_by = u.id) AS "devicesManaged",
+        (SELECT SUM(p.amount) FROM payments p JOIN loans l ON p.loan_id = l.id WHERE l.customer_id IN (SELECT id FROM users WHERE assigned_agent_id = u.id)) AS "totalSales",
+        u.last_active
+      FROM users u
+      WHERE u.role = 'agent'
+    `);
+    res.json(agents.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 // @route   GET api/agents/me
 // @desc    Get current agent's profile
 // @access  Private (Agent and Admin only)

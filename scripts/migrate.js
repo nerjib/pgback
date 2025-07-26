@@ -118,6 +118,13 @@ async function migrate() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS landmark TEXT;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS gps VARCHAR(255);`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active TIMESTAMP;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50);`);
+    await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS loan_id UUID REFERENCES loans(id) ON DELETE SET NULL;`);
+
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
+
+
     console.log('Table "users" created or already exists.');
     console.log('Database migration completed successfully.');
   } catch (error) {
