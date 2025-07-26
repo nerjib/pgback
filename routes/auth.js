@@ -72,7 +72,7 @@ router.post('/login', async (req, res) => {
         role: user.rows[0].role,
       },
     };
-
+    await  query('UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = $1', [user.rows[0].id]);
     jwt.sign(
       payload,
       process.env.JWT_SECRET,
