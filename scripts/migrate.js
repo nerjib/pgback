@@ -141,6 +141,9 @@ async function migrate() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_number VARCHAR(255) UNIQUE;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS credit_score INTEGER;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS occupation VARCHAR(50);`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_income DECIMAL(10, 2);`);
+
 
 
     console.log('Table "users" created or already exists.');

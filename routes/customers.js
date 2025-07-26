@@ -143,5 +143,44 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
+// @route   PUT api/customers/:id
+// @desc    Update customer information
+// @access  Private (Admin, Agent, Customer - can only update their own profile)
+router.put('/:id', auth, async (req, res) => {
+  const { id } = req.params;
+  const { name, email, phone, idNumber, occupation, monthly_income, location, county, status } = req.body;
+
+  try {
+    // Authorize: Admin and Agent can update any customer, Customer can only update their own profile
+    if (req.user.role === 'customer' && req.user.id !== id) {
+      return res.status(403).json({ msg: 'Access denied: You can only update your own profile.' });
+    }
+
+    const updatedCustomer = await query(
+      `UPDATE users SET
+        username = COALESCE($1, username),
+        email = COALESCE($2, email),
+        phone_number = COALESCE($3, phone_number),
+        id_number = COALESCE($4, id_number),
+        occupation = COALESCE($5, occupation),
+        monthly_income = COALESCE($6, monthly_income),
+        state = COALESCE($7, state),
+        city = COALESCE($8, city),
+        status = COALESCE($9, status)
+      WHERE id = $10 RETURNING *`,
+      [name, email, phone, idNumber, occupation, monthly_income, location, county, status, id]
+    );
+
+    if (updatedCustomer.rows.length === 0) {
+      return res.status(404).json({ msg: 'Customer not found' });
+    }
+
+    res.json({ msg: 'Customer updated successfully', customer: updatedCustomer.rows[0] });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 module.exports = router;
 
