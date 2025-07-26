@@ -38,7 +38,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     if (assignedDevices.rows.length > 0) {
       const agentId = assignedDevices.rows[0].assigned_by;
 
-      const agent = await query('SELECT commission_rate FROM users WHERE id = $1 AND role = agent', [agentId]);
+      const agent = await query('SELECT commission_rate FROM users WHERE id = $1 AND role = $2', [agentId, 'agent']);
 
       if (agent.rows.length > 0 && agent.rows[0].commission_rate > 0) {
         const commissionRate = agent.rows[0].commission_rate;
@@ -90,8 +90,8 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
       }
 
       await query(
-        'UPDATE loans SET amount_paid = $1, balance = $2, status = $3, next_payment_date = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5',
-        [newAmountPaid, newBalance, newStatus, newNextPaymentDate, loan.id]
+        'UPDATE loans SET amount_paid = $1, balance = $2, status = $3, next_payment_date = $4, updated_at = $6 WHERE id = $5',
+        [newAmountPaid, newBalance, newStatus, newNextPaymentDate, loan.id, new Date()]
       );
       console.log(`Loan ${loan.id} updated: Paid ${amountToApply}, New Balance ${newBalance}, Status ${newStatus}, Next Payment Date ${newNextPaymentDate}.`);
 

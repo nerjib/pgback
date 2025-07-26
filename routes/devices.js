@@ -26,9 +26,9 @@ router.post('/', auth, authorize('admin'), async (req, res) => {
 
     const newDevice = await query(
       'INSERT INTO devices (serial_number, model, price, device_type_id, status) VALUES ($1, $2, $3, $4, $5) RETURNING *;',
-      [serial_number, device_model, amount, device_type_id, 'pending_approval']
+      [serial_number, device_model, amount, device_type_id, 'available']
     );
-    res.json({ msg: 'Device added successfully, pending approval', device: newDevice.rows[0] });
+    res.json({ msg: 'Device added successfully', device: newDevice.rows[0] });
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');

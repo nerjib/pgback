@@ -33,8 +33,8 @@ router.post('/manual', auth, authorize('admin'), async (req, res) => {
     }
 
     const newPayment = await query(
-      'INSERT INTO payments (user_id, amount, currency, payment_method, transaction_id, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;',
-      [user_id, amount, currency || 'NGN', payment_method || 'manual', transaction_id || null, 'completed']
+      'INSERT INTO payments (user_id, amount, currency, payment_method, transaction_id, status, loan_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;',
+      [user_id, amount, currency || 'NGN', payment_method || 'manual', transaction_id || null, 'completed', loan_id]
     );
 
     await handleSuccessfulPayment(user_id, amount, newPayment.rows[0].id, loan_id);

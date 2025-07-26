@@ -70,6 +70,7 @@ async function migrate() {
         transaction_id VARCHAR(255) UNIQUE,
         status VARCHAR(50) NOT NULL DEFAULT 'pending', -- 'pending', 'completed', 'failed'
         payment_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        loan_id UUID REFERENCES loans(id) ON DELETE SET NULL, -- New column for loan ID
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -144,7 +145,10 @@ async function migrate() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS occupation VARCHAR(50);`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_income DECIMAL(10, 2);`);
     await pool.query(`ALTER TABLE loans ADD COLUMN IF NOT EXISTS agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
-
+   
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  customer_id UUID REFERENCES users(id) ON DELETE CASCADE NULL;`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  install_date TIMESTAMP NULL;`);
+      await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS  loan_id UUID REFERENCES loans(id) ON DELETE SET NULL;`)
     console.log('Table "users" created or already exists.');
     console.log('Database migration completed successfully.');
   } catch (error) {

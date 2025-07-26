@@ -45,6 +45,16 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
     );
 
     res.json({ msg: 'Loan created successfully', loan: newLoan.rows[0] });
+
+    // Update device status and assign to customer/agent
+    await query(
+      `
+      UPDATE devices 
+      SET status = 'assigned', customer_id = $1, install_date = $2, assigned_by = $3
+      WHERE id = $4
+    `,
+      [customer_id, next_payment_date, agent_id, device_id]
+    );
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
