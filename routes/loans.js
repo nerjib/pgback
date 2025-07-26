@@ -8,7 +8,7 @@ const { query } = require('../config/database');
 // @desc    Create a new loan (Admin/Agent)
 // @access  Private (Admin, Agent)
 router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
-  const { customer_id, device_id, device_price, term_months, down_payment = 0, guarantor_details } = req.body;
+  const { customer_id, device_id, device_price, term_months, down_payment = 0, guarantor_details, agent_id } = req.body;
 
   try {
     // Basic validation
@@ -33,8 +33,8 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
     next_payment_date.setMonth(next_payment_date.getMonth() + 1); // Next month
 
     const newLoan = await query(
-      'INSERT INTO loans (customer_id, device_id, total_amount, amount_paid, balance, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;',
-      [customer_id, device_id, total_amount, down_payment, total_amount, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details]
+      'INSERT INTO loans (customer_id, device_id, total_amount, amount_paid, balance, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *;',
+      [customer_id, device_id, total_amount, down_payment, total_amount, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id]
     );
 
     res.json({ msg: 'Loan created successfully', loan: newLoan.rows[0] });
@@ -49,7 +49,19 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
 // @access  Private (Admin)
 router.get('/', auth, authorize('admin'), async (req, res) => {
   try {
-    const loans = await query('SELECT * FROM loans');
+    const loans = await query(`
+      SELECT
+        l.id AS loan_id,
+        u.username AS customer_name,
+        l.total_amount AS loan_amount,
+        (l.amount_paid / l.total_amount) * 100 AS payment_progress,
+        l.status,
+        l.next_payment_date AS next_payment,
+        l.monthly_payment
+      FROM loans l
+      JOIN users u ON l.customer_id = u.id
+      ORDER BY l.id ASC
+    `);
     res.json(loans.rows);
   } catch (err) {
     console.error(err.message);

@@ -61,7 +61,18 @@ router.put('/:id/approve', auth, authorize('admin'), async (req, res) => {
 // @access  Private (Admin, Agent)
 router.get('/', auth, authorize('admin', 'agent'), async (req, res) => {
   try {
-    const devices = await query('SELECT * FROM devices');
+    const devices = await query(`
+      SELECT
+        d.id,
+        d.serial_number AS "serialNumber",
+        d.status,
+        d.created_at AS "installDate",
+        dt.device_name AS type,
+        dt.device_model AS model,
+        dt.amount AS price
+      FROM devices d
+      JOIN device_types dt ON d.device_type_id = dt.id
+    `);
     res.json(devices.rows);
   } catch (err) {
     console.error(err.message);
