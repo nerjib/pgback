@@ -10,7 +10,20 @@ const { handleSuccessfulPayment } = require('../services/paymentService');
 // @desc    Record a manual payment (Admin only)
 // @access  Private (Admin)
 router.post('/manual', auth, authorize('admin'), async (req, res) => {
-  const { user_id, amount, currency, payment_method, transaction_id } = req.body;
+  const { user_id, amount, currency, payment_method, transaction_id, loan_id } = req.body;
+
+    if (!loan_id) {
+      return res.status(400).json({ msg: 'Loan ID is required for manual payments.' });
+    }
+
+    const loan = await query('SELECT monthly_payment FROM loans WHERE id = $1', [loan_id]);
+    if (loan.rows.length === 0) {
+      return res.status(404).json({ msg: 'Loan not found.' });
+    }
+
+    if (amount < loan.rows[0].monthly_payment) {
+      return res.status(400).json({ msg: `Payment amount must be at least the monthly payment of ${loan.rows[0].monthly_payment}.` });
+    }
 
   try {
     // Check if user exists and is a customer
@@ -24,7 +37,7 @@ router.post('/manual', auth, authorize('admin'), async (req, res) => {
       [user_id, amount, currency || 'NGN', payment_method || 'manual', transaction_id || null, 'completed']
     );
 
-    await handleSuccessfulPayment(user_id, amount, newPayment.rows[0].id);
+    await handleSuccessfulPayment(user_id, amount, newPayment.rows[0].id, loan_id);
 
     res.json({ msg: 'Manual payment recorded successfully', payment: newPayment.rows[0] });
   } catch (err) {

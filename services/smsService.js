@@ -2,8 +2,8 @@ const AfricasTalking = require('africastalking');
 
 // Initialize AfricasTalking
 const africastalking = AfricasTalking({
-  apiKey: process.env.AFRICASTALKING_API_KEY || 'jhhh',
-  username: process.env.AFRICASTALKING_USERNAME || 'user',
+  apiKey: process.env.AFRICASTALKING_API_KEY || 'atsk_028f6176262c4ce1528ee1aa0a069c486f2727e760914262e5c4cb8f65b6ca341bba9606',
+  username: process.env.AFRICASTALKING_USERNAME || 'sandbox',
 });
 
 const sms = africastalking.SMS;
@@ -18,7 +18,7 @@ const sendSMS = async (to, message) => {
     console.log('SMS sent successfully:', response);
     return response;
   } catch (error) {
-    console.error('Error sending SMS:', error);
+    // console.error('Error sending SMS:', error);
     throw error;
   }
 };

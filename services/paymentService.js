@@ -6,14 +6,14 @@ const generateToken = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
-const handleSuccessfulPayment = async (userId, amount, paymentId) => {
+const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null) => {
   try {
     const token = generateToken();
 
     // Save token to database
     await query(
-      'INSERT INTO tokens (user_id, token, payment_id, expires_at) VALUES ($1, $2, $3, NOW() + INTERVAL 1 day',
-      [userId, token, paymentId]
+      'INSERT INTO tokens (user_id, token, payment_id, expires_at) VALUES ($1, $2, $3, $4)',
+      [userId, token, paymentId, new Date(Date.now() + 24 * 60 * 60 * 1000)]
     );
 
     // Get user's phone number (assuming it's stored in the users table or can be fetched)
@@ -22,7 +22,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId) => {
 
     if (userContact) {
       const message = `Your PayGo token is: ${token}. Amount paid: ${amount}. Valid for 24 hours.`;
-      await sendSMS(userContact, message);
+      // await sendSMS(userContact, message);
       console.log(`Token sent to user ${userId} via SMS.`);
     } else {
       console.warn(`Could not send token to user ${userId}: No phone number found.`);
@@ -52,15 +52,28 @@ const handleSuccessfulPayment = async (userId, amount, paymentId) => {
       }
     }
 
-    // Loan management: Update active loans for the customer
-    const activeLoans = await query(
-      'SELECT * FROM loans WHERE customer_id = $1 AND status = active ORDER BY created_at ASC',
-      [userId]
-    );
+    // Loan management: Update loans
+    let loansToUpdate = [];
+    if (loanId) {
+      // If a specific loanId is provided, fetch only that loan
+      const specificLoan = await query('SELECT * FROM loans WHERE id = $1 AND customer_id = $2', [loanId, userId]);
+      if (specificLoan.rows.length > 0) {
+        loansToUpdate.push(specificLoan.rows[0]);
+      } else {
+        console.warn(`Specific loan ${loanId} not found for customer ${userId}.`);
+      }
+    } else {
+      // If no specific loanId, apply to active loans (existing behavior)
+      const activeLoans = await query(
+        'SELECT * FROM loans WHERE customer_id = $1 AND status = active ORDER BY created_at ASC',
+        [userId]
+      );
+      loansToUpdate = activeLoans.rows;
+    }
 
     let remainingAmount = amount;
 
-    for (const loan of activeLoans.rows) {
+    for (const loan of loansToUpdate) {
       if (remainingAmount <= 0) break;
 
       const amountToApply = Math.min(remainingAmount, loan.balance);
@@ -69,6 +82,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId) => {
       const newStatus = newBalance <= 0 ? 'completed' : 'active';
       let newNextPaymentDate = loan.next_payment_date;
 
+      // Only advance next payment date if the loan is still active after this payment
       if (newStatus === 'active') {
         // Advance next payment date by one month
         newNextPaymentDate = new Date(loan.next_payment_date);
