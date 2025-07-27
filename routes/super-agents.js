@@ -18,7 +18,7 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
         u.phone_number AS phone, 
         u.state AS region, 
         u.status,
-        u.commission_rate AS "commissionRate",
+        u.super_commission_rate AS "commissionRate",
         (SELECT COUNT(*) FROM devices WHERE assigned_by IN (SELECT id FROM users WHERE super_agent_id = u.id)) AS "devicesManaged",
         (SELECT SUM(p.amount) FROM payments p JOIN loans l ON p.loan_id = l.id WHERE l.agent_id IN (SELECT id FROM users WHERE super_agent_id = u.id)) AS "totalSales",
         u.last_active

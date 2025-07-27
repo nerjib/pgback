@@ -59,25 +59,36 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
         const commissionRate = agent.rows[0].commission_rate;
         const commissionAmount = (amount * commissionRate) / 100;
 
-        const newCommission = await query(
-          'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-          [agentId, userId, paymentId, commissionAmount, commissionRate]
-        );
+        
 
         // Super-agent commission calculation
         const agentWithSuperAgent = await query('SELECT super_agent_id FROM users WHERE id = $1', [agentId]);
         const superAgentId = agentWithSuperAgent.rows[0]?.super_agent_id;
 
         if (superAgentId) {
-          // Define super-agent commission rate (e.g., 10% of the agent's commission)
-          const superAgentCommissionRate = 10; // This could be configurable
-          const superAgentCommissionAmount = (commissionAmount * superAgentCommissionRate) / 100;
+          const superAgent = await query('SELECT commission_rate FROM users WHERE id = $1', [superAgentId]);
 
-          await query(
-            'INSERT INTO super_agent_commissions (super_agent_id, agent_id, original_commission_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5)',
-            [superAgentId, agentId, newCommission.rows[0].id, superAgentCommissionAmount, superAgentCommissionRate]
-          );
-          console.log(`Super-agent ${superAgentId} earned ${superAgentCommissionAmount} from agent ${agentId}.`);
+          if (superAgent.rows.length > 0 && superAgent.rows[0].commission_rate > 0) {
+            const superAgentCommissionRate = superAgent.rows[0].commission_rate;
+            const superAgentCommissionAmount = (commissionAmount * superAgentCommissionRate) / 100;
+
+            const agentCommission = commissionAmount - superAgentCommissionAmount;
+
+            const newCommission = await query(
+              'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+              [agentId, userId, paymentId, agentCommission, commissionRate]
+            );
+            await query(
+              'INSERT INTO super_agent_commissions (super_agent_id, agent_id, original_commission_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5)',
+              [superAgentId, agentId, newCommission.rows[0].id, superAgentCommissionAmount, superAgentCommissionRate]
+            );
+            console.log(`Super-agent ${superAgentId} earned ${superAgentCommissionAmount} from agent ${agentId}.`);
+          } else {
+            await query(
+              'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+              [agentId, userId, paymentId, commissionAmount, commissionRate]
+            );
+          }
         }
       }
     }
