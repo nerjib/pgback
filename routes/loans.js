@@ -99,6 +99,7 @@ router.get('/:id', auth, async (req, res) => {
         l.total_amount AS "totalAmount",
         l.amount_paid AS "paidAmount",
         l.balance AS "remainingAmount",
+        l.agent_id,
         l.status,
         l.start_date AS "startDate",
         l.end_date AS "endDate",
@@ -120,6 +121,8 @@ router.get('/:id', auth, async (req, res) => {
         json_build_object(
           'id', d.id,
           'serialNumber', d.serial_number,
+          'assignedBy', d.assigned_by,
+          'assignedTo', d.customer_id,
           'type', dt.device_name,
           'model', dt.device_model,
           'status', d.status

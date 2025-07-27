@@ -139,12 +139,20 @@ async function migrate() {
     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS loan_id UUID REFERENCES loans(id) ON DELETE SET NULL;`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS device_type_id UUID REFERENCES device_types(id) ON DELETE SET NULL;`);
 
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_number VARCHAR(255) UNIQUE;`);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS credit_score INTEGER;`);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS occupation VARCHAR(50);`);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_income DECIMAL(10, 2);`);
-    await pool.query(`ALTER TABLE loans ADD COLUMN IF NOT EXISTS agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_withdrawal_date TIMESTAMP WITH TIME ZONE;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_paid DECIMAL(10, 2) DEFAULT 0.00;`);
+
+    // Agent Withdrawals table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS agent_withdrawals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        withdrawal_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        transaction_id VARCHAR(255) UNIQUE
+      );
+    `);
+    console.log('Table "agent_withdrawals" created or already exists.');
    
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  customer_id UUID REFERENCES users(id) ON DELETE CASCADE NULL;`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  install_date TIMESTAMP NULL;`);

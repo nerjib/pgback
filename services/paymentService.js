@@ -23,7 +23,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     if (userContact) {
       const message = `Your PayGo token is: ${token}. Amount paid: ${amount}. Valid for 24 hours.`;
       // await sendSMS(userContact, message);
-      console.log(`Token sent to user ${userId} via SMS.`);
+      console.log(`Token ${token} sent to user ${userId} via SMS.`);
     } else {
       console.warn(`Could not send token to user ${userId}: No phone number found.`);
     }
@@ -31,9 +31,10 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     // Commission calculation
     // Find devices assigned to this customer by an agent
     const assignedDevices = await query(
-      'SELECT assigned_by FROM devices WHERE assigned_to = $1 AND assigned_by IS NOT NULL',
+      'SELECT assigned_by FROM devices WHERE customer_id = $1 AND assigned_by IS NOT NULL',
       [userId]
     );
+    console.log(`Assigned devices for customer ${userId}:`, assignedDevices.rows[0]);
 
     if (assignedDevices.rows.length > 0) {
       const agentId = assignedDevices.rows[0].assigned_by;
@@ -48,7 +49,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
           'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5)',
           [agentId, userId, paymentId, commissionAmount, commissionRate]
         );
-        console.log(`Commission of ${commissionAmount} recorded for agent ${agentId}.`);
+        // console.log(`Commission of ${commissionAmount} recorded for agent ${agentId}.`);
       }
     }
 
