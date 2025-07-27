@@ -1,27 +1,50 @@
 const { query } = require('../config/database');
 const { sendSMS } = require('./smsService');
-
-const generateToken = () => {
-  // Generate a simple 6-digit numeric token for now
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
+const { generateBioliteCode } = require('./bioliteService');
 
 const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null) => {
   try {
-    const token = generateToken();
+    let token = null;
+    let tokenExpirationDays = 30; // Default to 30 days if no loan or specific calculation
 
-    let tokenExpirationDays = 30;
     if (loanId) {
-      const loanResult = await query('SELECT monthly_payment FROM loans WHERE id = $1', [loanId]);
+      const loanResult = await query('SELECT monthly_payment, device_id FROM loans WHERE id = $1', [loanId]);
       if (loanResult.rows.length > 0) {
         const monthlyPayment = parseFloat(loanResult.rows[0].monthly_payment);
+        const deviceId = loanResult.rows[0].device_id;
+
         if (amount > monthlyPayment) {
           const extraAmount = amount - monthlyPayment;
-          // Assuming a linear relationship: extra days = (extra amount / monthly payment) * 30 days
-          const extraDays = (extraAmount / monthlyPayment) * 30;
-          tokenExpirationDays += extraDays;
+          tokenExpirationDays = Math.floor(30 + (extraAmount / monthlyPayment) * 30); // Calculate days for BioLite arg
+        } else {
+          tokenExpirationDays = 30; // Default to 30 days if only monthly payment is made
         }
+
+        // Get device serial number for BioLite
+        const deviceResult = await query('SELECT serial_number FROM devices WHERE id = $1', [deviceId]);
+        const serialNum = deviceResult.rows.length > 0 ? deviceResult.rows[0].serial_number : null;
+
+        if (serialNum) {
+          try {
+            const bioliteResponse = await generateBioliteCode(serialNum, 'add_time', tokenExpirationDays);
+            token = bioliteResponse.code; // Assuming the BioLite API returns the code in a 'code' field
+            console.log(`Generated BioLite code for device ${serialNum}: ${token}`);
+          } catch (bioliteError) {
+            console.error('Failed to generate BioLite code, falling back to internal token:', bioliteError.message);
+            // Fallback to internal token generation if BioLite API fails
+            token = Math.floor(100000 + Math.random() * 900000).toString();
+          }
+        } else {
+          console.warn(`Device serial number not found for device ID: ${deviceId}. Falling back to internal token.`);
+          token = Math.floor(100000 + Math.random() * 900000).toString();
+        }
+      } else {
+        console.warn(`Loan ${loanId} not found. Falling back to internal token.`);
+        token = Math.floor(100000 + Math.random() * 900000).toString();
       }
+    } else {
+      // If no loanId, generate a simple internal token
+      token = Math.floor(100000 + Math.random() * 900000).toString();
     }
 
     // Save token to database
@@ -35,11 +58,11 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     const userContact = user.rows[0] ? user.rows[0].phone_number : null;
 
     if (userContact) {
-      const message = `Your PayGo token is: ${token}. Amount paid: ${amount}. Valid for 24 hours.`;
-      // await sendSMS(userContact, message);
-      console.log(`Token ${token} sent to user ${userId} via SMS.`);
+      const message = `Your PayGo activation code is: ${token}. Amount paid: ${amount}. Valid for ${tokenExpirationDays} days.`;
+      // await sendSMS(userContact, message); // Uncomment this line to enable SMS sending
+      console.log(`Activation code ${token} sent to user ${userId} via SMS.`);
     } else {
-      console.warn(`Could not send token to user ${userId}: No phone number found.`);
+      console.warn(`Could not send activation code to user ${userId}: No phone number found.`);
     }
 
     // Commission calculation
