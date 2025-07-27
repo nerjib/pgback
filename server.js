@@ -25,6 +25,7 @@ app.use('/api/loans', require('./routes/loans'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/device-types', require('./routes/deviceTypes'));
+app.use('/api/super-agents', require('./routes/super-agents'));
 
 // Start the server
 app.listen(PORT, () => {
