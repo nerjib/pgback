@@ -83,12 +83,12 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
               [superAgentId, agentId, newCommission.rows[0].id, superAgentCommissionAmount, superAgentCommissionRate]
             );
             console.log(`Super-agent ${superAgentId} earned ${superAgentCommissionAmount} from agent ${agentId}.`);
-          } else {
-            await query(
-              'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-              [agentId, userId, paymentId, commissionAmount, commissionRate]
-            );
           }
+        } else {
+          await query(
+            'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [agentId, userId, paymentId, commissionAmount, commissionRate]
+          );
         }
       }
     }
