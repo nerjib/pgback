@@ -157,8 +157,22 @@ async function migrate() {
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  customer_id UUID REFERENCES users(id) ON DELETE CASCADE NULL;`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  install_date TIMESTAMP NULL;`);
       await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS  loan_id UUID REFERENCES loans(id) ON DELETE SET NULL;`)
-    console.log('Table "users" created or already exists.');
-    console.log('Database migration completed successfully.');
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS super_agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS super_commission_rate DECIMAL(5, 2);`);
+
+    // Super Agent Commissions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS super_agent_commissions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        super_agent_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        agent_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        original_commission_id UUID REFERENCES commissions(id) ON DELETE CASCADE NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        commission_percentage DECIMAL(5, 2) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "super_agent_commissions" created or already exists.');
   } catch (error) {
     console.error('Database migration failed:', error);
     process.exit(1);

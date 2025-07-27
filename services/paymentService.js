@@ -10,10 +10,24 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
   try {
     const token = generateToken();
 
+    let tokenExpirationDays = 30;
+    if (loanId) {
+      const loanResult = await query('SELECT monthly_payment FROM loans WHERE id = $1', [loanId]);
+      if (loanResult.rows.length > 0) {
+        const monthlyPayment = parseFloat(loanResult.rows[0].monthly_payment);
+        if (amount > monthlyPayment) {
+          const extraAmount = amount - monthlyPayment;
+          // Assuming a linear relationship: extra days = (extra amount / monthly payment) * 30 days
+          const extraDays = (extraAmount / monthlyPayment) * 30;
+          tokenExpirationDays += extraDays;
+        }
+      }
+    }
+
     // Save token to database
     await query(
       'INSERT INTO tokens (user_id, token, payment_id, expires_at) VALUES ($1, $2, $3, $4)',
-      [userId, token, paymentId, new Date(Date.now() + 24 * 60 * 60 * 1000)]
+      [userId, token, paymentId, new Date(Date.now() + tokenExpirationDays * 24 * 60 * 60 * 1000)]
     );
 
     // Get user's phone number (assuming it's stored in the users table or can be fetched)
@@ -45,11 +59,26 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
         const commissionRate = agent.rows[0].commission_rate;
         const commissionAmount = (amount * commissionRate) / 100;
 
-        await query(
-          'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5)',
+        const newCommission = await query(
+          'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5) RETURNING id',
           [agentId, userId, paymentId, commissionAmount, commissionRate]
         );
-        // console.log(`Commission of ${commissionAmount} recorded for agent ${agentId}.`);
+
+        // Super-agent commission calculation
+        const agentWithSuperAgent = await query('SELECT super_agent_id FROM users WHERE id = $1', [agentId]);
+        const superAgentId = agentWithSuperAgent.rows[0]?.super_agent_id;
+
+        if (superAgentId) {
+          // Define super-agent commission rate (e.g., 10% of the agent's commission)
+          const superAgentCommissionRate = 10; // This could be configurable
+          const superAgentCommissionAmount = (commissionAmount * superAgentCommissionRate) / 100;
+
+          await query(
+            'INSERT INTO super_agent_commissions (super_agent_id, agent_id, original_commission_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5)',
+            [superAgentId, agentId, newCommission.rows[0].id, superAgentCommissionAmount, superAgentCommissionRate]
+          );
+          console.log(`Super-agent ${superAgentId} earned ${superAgentCommissionAmount} from agent ${agentId}.`);
+        }
       }
     }
 
