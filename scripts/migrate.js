@@ -26,23 +26,25 @@ async function migrate() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    // Devices table
+   console.log('Table "devices" created or already exists.');
 
-
-    // Commissions table
+    // Payments table
+   // table (for tracking device loans/payment plans)
+   
+    // Device Types table
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS commissions (
+      CREATE TABLE IF NOT EXISTS device_types (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        agent_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-        customer_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-        payment_id UUID REFERENCES payments(id) ON DELETE CASCADE NOT NULL,
+        device_name VARCHAR(255) NOT NULL,
+        manufacturer VARCHAR(255),
+        device_model VARCHAR(255) UNIQUE NOT NULL,
         amount DECIMAL(10, 2) NOT NULL,
-        commission_percentage DECIMAL(5, 2) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "commissions" created or already exists.');
-
-    // Devices table
+    console.log('Table "device_types" created or already exists.');
     await pool.query(`
       CREATE TABLE IF NOT EXISTS devices (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -57,26 +59,6 @@ async function migrate() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "devices" created or already exists.');
-
-    // Payments table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS payments (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL, -- Customer ID
-        amount DECIMAL(10, 2) NOT NULL,
-        currency VARCHAR(10) NOT NULL DEFAULT 'USD',
-        payment_method VARCHAR(50), -- 'manual', 'paystack'
-        transaction_id VARCHAR(255) UNIQUE,
-        status VARCHAR(50) NOT NULL DEFAULT 'pending', -- 'pending', 'completed', 'failed'
-        payment_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        loan_id UUID REFERENCES loans(id) ON DELETE SET NULL, -- New column for loan ID
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('Table "payments" created or already exists.');
-
-    // Loans table (for tracking device loans/payment plans)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS loans (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -99,20 +81,38 @@ async function migrate() {
     `);
     console.log('Table "loans" created or already exists.');
 
-    // Device Types table
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS device_types (
+      CREATE TABLE IF NOT EXISTS payments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        device_name VARCHAR(255) NOT NULL,
-        manufacturer VARCHAR(255),
-        device_model VARCHAR(255) UNIQUE NOT NULL,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL, -- Customer ID
         amount DECIMAL(10, 2) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+        payment_method VARCHAR(50), -- 'manual', 'paystack'
+        transaction_id VARCHAR(255) UNIQUE,
+        status VARCHAR(50) NOT NULL DEFAULT 'pending', -- 'pending', 'completed', 'failed'
+        payment_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        loan_id UUID REFERENCES loans(id) ON DELETE SET NULL, -- New column for loan ID
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('Table "device_types" created or already exists.');
+    console.log('Table "payments" created or already exists.');
 
+    // Loans 
+    // Commissions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS commissions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        customer_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        payment_id UUID REFERENCES payments(id) ON DELETE CASCADE NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        commission_percentage DECIMAL(5, 2) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table "commissions" created or already exists.');
+
+    
     // Tokens table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tokens (
@@ -141,6 +141,10 @@ async function migrate() {
 
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_withdrawal_date TIMESTAMP WITH TIME ZONE;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS commission_paid DECIMAL(10, 2) DEFAULT 0.00;`);
+    await pool.query(`ALTER TABLE loans ADD COLUMN IF NOT EXISTS agent_id UUID;`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS id_number varchar(255);`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS credit_score varchar(255);`);
+
 
     // Agent Withdrawals table
     await pool.query(`
@@ -153,6 +157,18 @@ async function migrate() {
       );
     `);
     console.log('Table "agent_withdrawals" created or already exists.');
+
+    // Super Agent Withdrawals table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS super_agent_withdrawals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        super_agent_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        withdrawal_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        transaction_id VARCHAR(255) UNIQUE
+      );
+    `);
+    console.log('Table "super_agent_withdrawals" created or already exists.');
    
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  customer_id UUID REFERENCES users(id) ON DELETE CASCADE NULL;`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  install_date TIMESTAMP NULL;`);

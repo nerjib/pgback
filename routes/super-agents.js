@@ -186,10 +186,13 @@ router.post('/withdraw-commission', auth, authorize('super-agent', 'admin'), asy
       return res.status(400).json({ msg: 'Invalid withdrawal amount or insufficient balance.' });
     }
 
+    // Generate a unique transaction ID if not provided
+    const finalTransactionId = transaction_id || `SAW-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
     // Record withdrawal
     const newWithdrawal = await query(
-      'INSERT INTO super_agent_withdrawals (super_agent_id, amount) VALUES ($1, $2) RETURNING *;',
-      [superAgentId, amount]
+      'INSERT INTO super_agent_withdrawals (super_agent_id, amount, transaction_id) VALUES ($1, $2, $3) RETURNING *;',
+      [superAgentId, amount, finalTransactionId]
     );
 
     // Update super agent's commission_paid and last_withdrawal_date

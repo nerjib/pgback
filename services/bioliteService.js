@@ -1,5 +1,7 @@
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+require('dotenv').config();
+
 
 // Ensure these environment variables are set in your .env file
 const BIOLITE_API_URL = process.env.BIOLITE_API_URL;
@@ -18,30 +20,45 @@ let tokenExpiryTime = 0; // Timestamp when the token expires
  */
 const getBioliteAccessToken = async () => {
   // Return cached token if it's still valid
-  if (bioliteAccessToken && Date.now() < tokenExpiryTime) {
-    console.log('Reusing cached BioLite access token.', bioliteAccessToken);
-    return bioliteAccessToken;
-  }
+  // if (bioliteAccessToken && Date.now() < tokenExpiryTime) {
+  //   console.log('Reusing cached BioLite access token.', bioliteAccessToken);
+  //   return bioliteAccessToken;
+  // }
 
   try {
     // JWT payload for BioLite authentication
-    const authJwtPayload = {
+    // const authJwtPayload = {
+    //   iss: BIOLITE_CLIENT_KEY, // Client key provided by BioLite
+    //   iat: Math.floor(Date.now() / 1000), // Issued at timestamp (seconds since epoch)
+    //   jti: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15), // Unique ID
+    //   sub: BIOLITE_PUBLIC_KEY, // Public key registered with BioLite
+    // };
+
+    // // Sign the JWT with your private key using ES256 algorithm
+    // const signedAuthJwt = jwt.sign(authJwtPayload, BIOLITE_PRIVATE_KEY, { algorithm: 'ES256' });
+    // console.log('Signed BioLite authentication JWT:', signedAuthJwt);
+
+    //  Token payload
+    const payload = {
       iss: BIOLITE_CLIENT_KEY, // Client key provided by BioLite
       iat: Math.floor(Date.now() / 1000), // Issued at timestamp (seconds since epoch)
       jti: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15), // Unique ID
-      sub: BIOLITE_PUBLIC_KEY, // Public key registered with BioLite
+      sub: BIOLITE_PUBLIC_KEY
     };
-
-    // Sign the JWT with your private key using ES256 algorithm
-    const signedAuthJwt = jwt.sign(authJwtPayload, BIOLITE_PRIVATE_KEY, { algorithm: 'ES256' });
-
+    // Sign the token
+    const token = jwt.sign(payload, BIOLITE_PRIVATE_KEY, { algorithm: 'ES256' });
+    
+    console.log('Generated JWT token:');
+    console.log(token);
+    
+    
     // Make the authentication request to BioLite API
     const response = await axios.post(`${BIOLITE_API_URL}/auth`, {
-      token: signedAuthJwt,
+      token: token,
       tokenType: 'auth',
     });
 
-    bioliteAccessToken = response.data.token;
+    bioliteAccessToken = response.data;
     tokenExpiryTime = Date.now() + (55 * 60 * 1000);
     console.log('Received new BioLite access token.', bioliteAccessToken);
     return bioliteAccessToken;
@@ -68,6 +85,7 @@ const generateBioliteCode = async (serialNum, codeType, arg) => {
       serialNum,
       codeType,
       arg,
+      data: 1
     }, {
       headers: {
         Authorization: accessToken,

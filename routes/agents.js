@@ -207,59 +207,62 @@ module.exports = router;
 // @desc    Agent withdraws commission
 // @access  Private (Agent, Admin)
 router.post('/withdraw-commission', auth, authorize('agent', 'admin'), async (req, res) => {
-  const { amount } = req.body;
-  const agentId = req.user.id;
+  const { amount, transaction_id } = req.body;
+    const agentId = req.user.id;
 
-  try {
-    // Fetch agent's current commission details
-    const agentResult = await query(
-      `SELECT 
-        COALESCE(SUM(c.amount), 0) AS total_earned,
-        COALESCE(u.commission_paid, 0) AS total_paid,
-        u.last_withdrawal_date
-      FROM users u
-      LEFT JOIN commissions c ON c.agent_id = u.id
-      WHERE u.id = $1
-      GROUP BY u.commission_paid, u.last_withdrawal_date`,
-      [agentId]
-    );
+    try {
+      // Fetch agent's current commission details
+      const agentResult = await query(
+        `SELECT 
+          COALESCE(SUM(c.amount), 0) AS total_earned,
+          COALESCE(u.commission_paid, 0) AS total_paid,
+          u.last_withdrawal_date
+        FROM users u
+        LEFT JOIN commissions c ON c.agent_id = u.id
+        WHERE u.id = $1
+        GROUP BY u.commission_paid, u.last_withdrawal_date`,
+        [agentId]
+      );
 
-    if (agentResult.rows.length === 0) {
-      return res.status(404).json({ msg: 'Agent not found.' });
-    }
-
-    const { total_earned, total_paid, last_withdrawal_date } = agentResult.rows[0];
-    const availableBalance = parseFloat(total_earned) - parseFloat(total_paid);
-
-    // Check if withdrawal is allowed this month
-    const now = new Date();
-    if (last_withdrawal_date) {
-      const lastWithdrawal = new Date(last_withdrawal_date);
-      if (lastWithdrawal.getMonth() === now.getMonth() && lastWithdrawal.getFullYear() === now.getFullYear()) {
-        return res.status(400).json({ msg: 'You can only withdraw commission once a month.' });
+      if (agentResult.rows.length === 0) {
+        return res.status(404).json({ msg: 'Agent not found.' });
       }
+
+      const { total_earned, total_paid, last_withdrawal_date } = agentResult.rows[0];
+      const availableBalance = parseFloat(total_earned) - parseFloat(total_paid);
+
+      // Check if withdrawal is allowed this month
+      const now = new Date();
+      if (last_withdrawal_date) {
+        const lastWithdrawal = new Date(last_withdrawal_date);
+        if (lastWithdrawal.getMonth() === now.getMonth() && lastWithdrawal.getFullYear() === now.getFullYear()) {
+          return res.status(400).json({ msg: 'You can only withdraw commission once a month.' });
+        }
+      }
+
+      // Validate withdrawal amount
+      if (amount <= 0 || amount > availableBalance) {
+        return res.status(400).json({ msg: 'Invalid withdrawal amount or insufficient balance.' });
+      }
+
+      // Generate a unique transaction ID if not provided
+      const finalTransactionId = transaction_id || `AW-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+      // Record withdrawal
+      const newWithdrawal = await query(
+        'INSERT INTO agent_withdrawals (agent_id, amount, transaction_id) VALUES ($1, $2, $3) RETURNING *;',
+        [agentId, amount, finalTransactionId]
+      );
+
+      // Update agent's commission_paid and last_withdrawal_date
+      const updatedAgent = await query(
+        'UPDATE users SET commission_paid = commission_paid + $1, last_withdrawal_date = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;',
+        [amount, agentId]
+      );
+
+      res.json({ msg: 'Commission withdrawn successfully', withdrawal: newWithdrawal.rows[0], agent: updatedAgent.rows[0] });
+    } catch (err) {
+      console.error(err.message);
+      res.status(500).send('Server Error');
     }
-
-    // Validate withdrawal amount
-    if (amount <= 0 || amount > availableBalance) {
-      return res.status(400).json({ msg: 'Invalid withdrawal amount or insufficient balance.' });
-    }
-
-    // Record withdrawal
-    const newWithdrawal = await query(
-      'INSERT INTO agent_withdrawals (agent_id, amount) VALUES ($1, $2) RETURNING *;',
-      [agentId, amount]
-    );
-
-    // Update agent's commission_paid and last_withdrawal_date
-    const updatedAgent = await query(
-      'UPDATE users SET commission_paid = commission_paid + $1, last_withdrawal_date = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;',
-      [amount, agentId]
-    );
-
-    res.json({ msg: 'Commission withdrawn successfully', withdrawal: newWithdrawal.rows[0], agent: updatedAgent.rows[0] });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
-  }
-});
+  });
