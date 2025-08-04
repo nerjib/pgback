@@ -136,6 +136,43 @@ router.put('/super-agent/:id', auth, authorize('admin'), async (req, res) => {
   }
 });
 
+// @route   GET api/admin/settings/commission
+// @desc    Get general commission rates
+// @access  Private (Admin only)
+router.get('/settings/commission', auth, authorize('admin'), async (req, res) => {
+  try {
+    const rates = await query("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('general_agent_commission_rate', 'general_super_agent_commission_rate')");
+    const commissionRates = rates.rows.reduce((acc, rate) => {
+      acc[rate.setting_key] = parseFloat(rate.setting_value);
+      return acc;
+    }, {});
+    res.json(commissionRates);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   PUT api/admin/settings/commission
+// @desc    Update general commission rates
+// @access  Private (Admin only)
+router.put('/settings/commission', auth, authorize('admin'), async (req, res) => {
+  const { agent_rate, super_agent_rate } = req.body;
+
+  try {
+    if (agent_rate !== undefined) {
+      await query("UPDATE settings SET setting_value = $1 WHERE setting_key = 'general_agent_commission_rate'", [agent_rate]);
+    }
+    if (super_agent_rate !== undefined) {
+      await query("UPDATE settings SET setting_value = $1 WHERE setting_key = 'general_super_agent_commission_rate'", [super_agent_rate]);
+    }
+    res.json({ msg: 'General commission rates updated successfully' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 // Add more admin-specific routes here (e.g., manage devices, view analytics)
 
 module.exports = router;

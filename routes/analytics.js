@@ -9,14 +9,14 @@ const { query } = require('../config/database');
 // @access  Private (Admin)
 router.get('/overview', auth, authorize('admin'), async (req, res) => {
   try {
-    const totalPayments = await query('SELECT SUM(amount) FROM payments WHERE status = completed');
+    const totalPayments = await query('SELECT SUM(amount) FROM payments WHERE status = $1',['completed']);
     const totalLoans = await query('SELECT COUNT(*) FROM loans');
-    const activeLoans = await query('SELECT COUNT(*) FROM loans WHERE status = active');
-    const totalCustomers = await query('SELECT COUNT(*) FROM users WHERE role = customer');
-    const totalAgents = await query('SELECT COUNT(*) FROM users WHERE role = agent');
+    const activeLoans = await query('SELECT COUNT(*) FROM loans WHERE status = $1', ['active']);
+    const totalCustomers = await query('SELECT COUNT(*) FROM users WHERE role = $1', ['customer']);
+    const totalAgents = await query('SELECT COUNT(*) FROM users WHERE role = $1', ['agent']);
     const totalDevices = await query('SELECT COUNT(*) FROM devices');
-    const assignedDevices = await query('SELECT COUNT(*) FROM devices WHERE status = assigned');
-    const availableDevices = await query('SELECT COUNT(*) FROM devices WHERE status = available');
+    const assignedDevices = await query('SELECT COUNT(*) FROM devices WHERE status = $1', ['assigned']);
+    const availableDevices = await query('SELECT COUNT(*) FROM devices WHERE status = $1', ['available']);
 
     res.json({
       totalPayments: parseFloat(totalPayments.rows[0].sum || 0),

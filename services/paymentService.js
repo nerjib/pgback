@@ -8,16 +8,40 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     let tokenExpirationDays = 30; // Default to 30 days if no loan or specific calculation
 
     if (loanId) {
-      const loanResult = await query('SELECT monthly_payment, device_id FROM loans WHERE id = $1', [loanId]);
+      const loanResult = await query('SELECT monthly_payment, device_id, payment_frequency, payment_cycle_amount FROM loans WHERE id = $1', [loanId]);
       if (loanResult.rows.length > 0) {
         const monthlyPayment = parseFloat(loanResult.rows[0].monthly_payment);
         const deviceId = loanResult.rows[0].device_id;
+        const payment_frequency = loanResult.rows[0].payment_frequency;
+        const payment_cycle_amount = parseFloat(loanResult.rows[0].payment_cycle_amount);
 
-        if (amount > monthlyPayment) {
-          const extraAmount = amount - monthlyPayment;
-          tokenExpirationDays = Math.floor(30 + (extraAmount / monthlyPayment) * 30); // Calculate days for BioLite arg
+        if (amount > payment_cycle_amount) {
+          const extraAmount = amount - payment_cycle_amount;
+          let days_in_cycle;
+          switch (payment_frequency) {
+            case 'daily':
+              days_in_cycle = 1;
+              break;
+            case 'weekly':
+              days_in_cycle = 7;
+              break;
+            default: // monthly
+              days_in_cycle = 30;
+              break;
+          }
+          tokenExpirationDays = Math.floor(days_in_cycle + (extraAmount / payment_cycle_amount) * days_in_cycle); // Calculate days for BioLite arg
         } else {
-          tokenExpirationDays = 30; // Default to 30 days if only monthly payment is made
+          switch (payment_frequency) {
+            case 'daily':
+              tokenExpirationDays = 1;
+              break;
+            case 'weekly':
+              tokenExpirationDays = 7;
+              break;
+            default: // monthly
+              tokenExpirationDays = 30;
+              break;
+          }
         }
 
         // Get device serial number for BioLite
@@ -76,23 +100,30 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     if (assignedDevices.rows.length > 0) {
       const agentId = assignedDevices.rows[0].assigned_by;
 
-      const agent = await query('SELECT commission_rate FROM users WHERE id = $1 AND role = $2', [agentId, 'agent']);
+      const agentResult = await query('SELECT commission_rate, super_agent_id FROM users WHERE id = $1 AND role = $2', [agentId, 'agent']);
 
-      if (agent.rows.length > 0 && agent.rows[0].commission_rate > 0) {
-        const commissionRate = agent.rows[0].commission_rate;
+      if (agentResult.rows.length > 0) {
+        let commissionRate = agentResult.rows[0].commission_rate;
+        if (commissionRate === null) {
+          const generalRate = await query("SELECT setting_value FROM settings WHERE setting_key = 'general_agent_commission_rate'");
+          commissionRate = parseFloat(generalRate.rows[0].setting_value);
+        }
+
         const commissionAmount = (amount * commissionRate) / 100;
 
-        
-
         // Super-agent commission calculation
-        const agentWithSuperAgent = await query('SELECT super_agent_id FROM users WHERE id = $1', [agentId]);
-        const superAgentId = agentWithSuperAgent.rows[0]?.super_agent_id;
+        const superAgentId = agentResult.rows[0].super_agent_id;
 
         if (superAgentId) {
-          const superAgent = await query('SELECT commission_rate FROM users WHERE id = $1', [superAgentId]);
+          const superAgentResult = await query('SELECT commission_rate FROM users WHERE id = $1', [superAgentId]);
 
-          if (superAgent.rows.length > 0 && superAgent.rows[0].commission_rate > 0) {
-            const superAgentCommissionRate = superAgent.rows[0].commission_rate;
+          if (superAgentResult.rows.length > 0) {
+            let superAgentCommissionRate = superAgentResult.rows[0].commission_rate;
+            if (superAgentCommissionRate === null) {
+              const generalSuperRate = await query("SELECT setting_value FROM settings WHERE setting_key = 'general_super_agent_commission_rate'");
+              superAgentCommissionRate = parseFloat(generalSuperRate.rows[0].setting_value);
+            }
+
             const superAgentCommissionAmount = (commissionAmount * superAgentCommissionRate) / 100;
 
             const agentCommission = commissionAmount - superAgentCommissionAmount;
@@ -148,9 +179,19 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
 
       // Only advance next payment date if the loan is still active after this payment
       if (newStatus === 'active') {
-        // Advance next payment date by one month
+        // Advance next payment date based on payment frequency
         newNextPaymentDate = new Date(loan.next_payment_date);
-        newNextPaymentDate.setMonth(newNextPaymentDate.getMonth() + 1);
+        switch (loan.payment_frequency) {
+          case 'daily':
+            newNextPaymentDate.setDate(newNextPaymentDate.getDate() + 1);
+            break;
+          case 'weekly':
+            newNextPaymentDate.setDate(newNextPaymentDate.getDate() + 7);
+            break;
+          default: // monthly
+            newNextPaymentDate.setMonth(newNextPaymentDate.getMonth() + 1);
+            break;
+        }
       }
 
       await query(

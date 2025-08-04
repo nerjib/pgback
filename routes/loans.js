@@ -8,7 +8,7 @@ const { query } = require('../config/database');
 // @desc    Create a new loan (Admin/Agent)
 // @access  Private (Admin, Agent)
 router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
-  const { customer_id, device_id, device_price, term_months, down_payment = 0, guarantor_details, agent_id } = req.body;
+  const { customer_id, device_id, device_price, term_months, down_payment = 0, guarantor_details, agent_id, payment_frequency = 'monthly' } = req.body;
 
   try {
     // Basic validation
@@ -33,15 +33,29 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
     }
 
     const total_amount = device_price - down_payment;
-    const monthly_payment = total_amount / term_months;
-    const next_payment_date = new Date();
-    next_payment_date.setMonth(next_payment_date.getMonth() + 1); // Next month
+    let payment_cycle_amount;
+    let next_payment_date = new Date();
+
+    switch (payment_frequency) {
+      case 'daily':
+        payment_cycle_amount = total_amount / (term_months * 30);
+        next_payment_date.setDate(next_payment_date.getDate() + 1);
+        break;
+      case 'weekly':
+        payment_cycle_amount = total_amount / (term_months * 4);
+        next_payment_date.setDate(next_payment_date.getDate() + 7);
+        break;
+      default: // monthly
+        payment_cycle_amount = total_amount / term_months;
+        next_payment_date.setMonth(next_payment_date.getMonth() + 1);
+        break;
+    }
 
     const loanStatus = req.user.role === 'admin' ? 'active' : 'pending'; // Determine status based on user role
 
     const newLoan = await query(
-      'INSERT INTO loans (customer_id, device_id, total_amount, amount_paid, balance, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *;',
-      [customer_id, device_id, total_amount, down_payment, total_amount, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id, loanStatus]
+      'INSERT INTO loans (customer_id, device_id, total_amount, amount_paid, balance, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id, status, payment_frequency, payment_cycle_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;',
+      [customer_id, device_id, total_amount, down_payment, total_amount, term_months, payment_cycle_amount, down_payment, next_payment_date, guarantor_details, agent_id, loanStatus, payment_frequency, payment_cycle_amount]
     );
 
     res.json({ msg: 'Loan created successfully', loan: newLoan.rows[0] });

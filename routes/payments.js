@@ -16,13 +16,13 @@ router.post('/manual', auth, authorize('admin'), async (req, res) => {
       return res.status(400).json({ msg: 'Loan ID is required for manual payments.' });
     }
 
-    const loan = await query('SELECT monthly_payment FROM loans WHERE id = $1', [loan_id]);
+    const loan = await query('SELECT payment_cycle_amount FROM loans WHERE id = $1', [loan_id]);
     if (loan.rows.length === 0) {
       return res.status(404).json({ msg: 'Loan not found.' });
     }
 
-    if (amount < loan.rows[0].monthly_payment) {
-      return res.status(400).json({ msg: `Payment amount must be at least the monthly payment of ${loan.rows[0].monthly_payment}.` });
+    if (amount < loan.rows[0].payment_cycle_amount) {
+      return res.status(400).json({ msg: `Payment amount must be at least the payment cycle amount of ${loan.rows[0].payment_cycle_amount}.` });
     }
 
   try {
