@@ -58,7 +58,7 @@ router.post('/login', async (req, res) => {
     if (user.rows.length === 0) {
       return res.status(400).json({ msg: 'Invalid Credentials' });
     }
-
+    console.log(user.rows[0])
     // Check password
     const isMatch = await bcrypt.compare(password, user.rows[0].password);
     if (!isMatch) {

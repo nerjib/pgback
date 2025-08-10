@@ -8,9 +8,9 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     let tokenExpirationDays = 30; // Default to 30 days if no loan or specific calculation
 
     if (loanId) {
-      const loanResult = await query('SELECT monthly_payment, device_id, payment_frequency, payment_cycle_amount FROM loans WHERE id = $1', [loanId]);
+      const loanResult = await query('SELECT payment_amount_per_cycle, device_id, payment_frequency, payment_cycle_amount FROM loans WHERE id = $1', [loanId]);
       if (loanResult.rows.length > 0) {
-        const monthlyPayment = parseFloat(loanResult.rows[0].monthly_payment);
+        const paymentAmountPerCycle = parseFloat(loanResult.rows[0].payment_amount_per_cycle);
         const deviceId = loanResult.rows[0].device_id;
         const payment_frequency = loanResult.rows[0].payment_frequency;
         const payment_cycle_amount = parseFloat(loanResult.rows[0].payment_cycle_amount);
@@ -92,7 +92,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     // Commission calculation
     // Find devices assigned to this customer by an agent
     const assignedDevices = await query(
-      'SELECT assigned_by FROM devices WHERE customer_id = $1 AND assigned_by IS NOT NULL',
+      'SELECT assigned_by FROM devices WHERE assigned_to = $1 AND assigned_by IS NOT NULL',
       [userId]
     );
     console.log(`Assigned devices for customer ${userId}:`, assignedDevices.rows[0]);
@@ -100,17 +100,19 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     if (assignedDevices.rows.length > 0) {
       const agentId = assignedDevices.rows[0].assigned_by;
 
-      const agentResult = await query('SELECT commission_rate, super_agent_id FROM users WHERE id = $1 AND role = $2', [agentId, 'agent']);
-
+      const agentResult = await query('SELECT commission_rate, super_agent_id, role FROM users WHERE id = $1', [agentId]);
+      console.log('agentResult', agentResult.rows[0])
       if (agentResult.rows.length > 0) {
+        if ( agentResult.rows[0].role === 'agent') {
+          console.log('<<<<<<<>>>>>>>>>>>>');
         let commissionRate = agentResult.rows[0].commission_rate;
-        if (commissionRate === null) {
-          const generalRate = await query("SELECT setting_value FROM settings WHERE setting_key = 'general_agent_commission_rate'");
+        if (commissionRate === null || commissionRate == 0 ) {
+          const generalRate = await query("SELECT setting_value FROM settings WHERE setting_key = $1", ['general_agent_commission_rate']);
           commissionRate = parseFloat(generalRate.rows[0].setting_value);
         }
 
         const commissionAmount = (amount * commissionRate) / 100;
-
+        console.log('commAmount', commissionAmount);
         // Super-agent commission calculation
         const superAgentId = agentResult.rows[0].super_agent_id;
 
@@ -120,7 +122,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
           if (superAgentResult.rows.length > 0) {
             let superAgentCommissionRate = superAgentResult.rows[0].commission_rate;
             if (superAgentCommissionRate === null) {
-              const generalSuperRate = await query("SELECT setting_value FROM settings WHERE setting_key = 'general_super_agent_commission_rate'");
+              const generalSuperRate = await query("SELECT setting_value FROM settings WHERE setting_key = $1", ['general_super_agent_commission_rate']);
               superAgentCommissionRate = parseFloat(generalSuperRate.rows[0].setting_value);
             }
 
@@ -144,6 +146,23 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
             [agentId, userId, paymentId, commissionAmount, commissionRate]
           );
         }
+      } else if (agentResult.rows[0].role === 'super-agent') {
+        console.log('>>>>>>>>>>>>');
+        const SuperComRate = await query("SELECT setting_value FROM settings WHERE setting_key = $1", ['general_agent_commission_rate']);
+        superAgentComRate = parseFloat(SuperComRate.rows[0].setting_value);
+        const sperComAmount = (amount * superAgentComRate) / 100;
+        console.log('commAmount', sperComAmount);
+        const sAgentCommission = (sperComAmount/100) * 100
+        const aCommsission = sperComAmount - sAgentCommission;
+        const newCommission = await query(
+          'INSERT INTO commissions (agent_id, customer_id, payment_id, amount, commission_percentage) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+          [agentId, userId, paymentId, aCommsission, 100]
+        );
+        await query(
+          'INSERT INTO super_agent_commissions (super_agent_id, agent_id, amount, commission_percentage, original_commission_id) VALUES ($1, $2, $3, $4, $5)',
+          [agentId, agentId,  sAgentCommission, superAgentComRate, newCommission.rows[0].id]
+        );
+      }
       }
     }
 
@@ -151,7 +170,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     let loansToUpdate = [];
     if (loanId) {
       // If a specific loanId is provided, fetch only that loan
-      const specificLoan = await query('SELECT * FROM loans WHERE id = $1 AND customer_id = $2', [loanId, userId]);
+      const specificLoan = await query('SELECT id, customer_id, total_amount, amount_paid, balance, term_months, next_payment_date, payment_frequency, payment_amount_per_cycle, status FROM loans WHERE id = $1 AND customer_id = $2', [loanId, userId]);
       if (specificLoan.rows.length > 0) {
         loansToUpdate.push(specificLoan.rows[0]);
       } else {
@@ -160,7 +179,7 @@ const handleSuccessfulPayment = async (userId, amount, paymentId, loanId = null)
     } else {
       // If no specific loanId, apply to active loans (existing behavior)
       const activeLoans = await query(
-        'SELECT * FROM loans WHERE customer_id = $1 AND status = active ORDER BY created_at ASC',
+        'SELECT id, customer_id, total_amount, amount_paid, balance, term_months, next_payment_date, payment_frequency, payment_amount_per_cycle, status FROM loans WHERE customer_id = $1 AND status = active ORDER BY created_at ASC',
         [userId]
       );
       loansToUpdate = activeLoans.rows;

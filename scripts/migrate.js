@@ -18,12 +18,14 @@ async function migrate() {
       CREATE TABLE IF NOT EXISTS users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         username VARCHAR(255) UNIQUE NOT NULL,
+        name VARCHAR(255),
         password VARCHAR(255) NOT NULL,
         email VARCHAR(255) UNIQUE,
         role VARCHAR(50) NOT NULL, -- 'admin', 'agent', 'customer'
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         commission_rate DECIMAL(5, 2) DEFAULT 0.00, -- For agents
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        super_agent_id UUID REFERENCES users(id) ON DELETE SET NULL
       );
     `);
     // Devices table
@@ -71,7 +73,7 @@ async function migrate() {
         end_date DATE,
         status VARCHAR(50) NOT NULL DEFAULT 'active', -- 'active', 'completed', 'defaulted'
         term_months INTEGER, -- Term of the loan in months
-        monthly_payment DECIMAL(10, 2), -- Calculated monthly payment
+        payment_amount_per_cycle DECIMAL(10, 2), -- Calculated payment per cycle
         down_payment DECIMAL(10, 2) DEFAULT 0.00, -- Down payment made by customer
         next_payment_date DATE,
         guarantor_details JSONB, -- Store guarantor information as JSON
@@ -172,9 +174,12 @@ async function migrate() {
    
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  customer_id UUID REFERENCES users(id) ON DELETE CASCADE NULL;`);
     await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS  install_date TIMESTAMP NULL;`);
-      await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS  loan_id UUID REFERENCES loans(id) ON DELETE SET NULL;`)
+     await pool.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS  loan_id UUID REFERENCES loans(id) ON DELETE SET NULL;`)
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS super_agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS super_commission_rate DECIMAL(5, 2);`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS name varchar(256);`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;`);
+    await pool.query(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS super_agent_id UUID REFERENCES users(id) ON DELETE SET NULL;`);
 
     // Super Agent Commissions table
     await pool.query(`

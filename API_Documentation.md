@@ -500,7 +500,7 @@ This document provides a comprehensive overview of the API endpoints for the Pay
       "end_date": null,
       "status": "active",
       "term_months": 12,
-      "monthly_payment": "15.00",
+      "payment_amount_per_cycle": "15.00",
       "down_payment": "20.00",
       "next_payment_date": "2025-08-26T00:00:00.000Z",
       "guarantor_details": {
@@ -545,7 +545,7 @@ This document provides a comprehensive overview of the API endpoints for the Pay
       "end_date": null,
       "status": "active",
       "term_months": 12,
-      "monthly_payment": "15.00",
+      "payment_amount_per_cycle": "15.00",
       "down_payment": "20.00",
       "next_payment_date": "2025-08-26T00:00:00.000Z",
       "guarantor_details": {
@@ -579,7 +579,7 @@ This document provides a comprehensive overview of the API endpoints for the Pay
     "end_date": null,
     "status": "active",
     "term_months": 12,
-    "monthly_payment": "15.00",
+    "payment_amount_per_cycle": "15.00",
     "down_payment": "20.00",
     "next_payment_date": "2025-08-26T00:00:00.000Z",
     "guarantor_details": {

@@ -7,7 +7,7 @@ const { query } = require('../config/database');
 // @route   POST api/loans
 // @desc    Create a new loan (Admin/Agent)
 // @access  Private (Admin, Agent)
-router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
+router.post('/', auth, authorize('admin', 'agent', 'super-agent'), async (req, res) => {
   const { customer_id, device_id, device_price, term_months, down_payment = 0, guarantor_details, agent_id, payment_frequency = 'monthly' } = req.body;
 
   try {
@@ -32,6 +32,13 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
       return res.status(400).json({ msg: 'Device is not available for assignment. Current status: ' + device.rows[0].status });
     }
 
+    console.log('>>>>>>>>>', req.user.id, '££££££', device_id, 'cid', customer_id);
+    // Assign device
+    const assignedDevice = await query(
+      'UPDATE devices SET assigned_to = $1, assigned_by = $2, status = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *;',
+      [customer_id, req.user.id, 'assigned', device_id]
+    );
+    console.log('lllllllll', assignedDevice.rows[0]);
     const total_amount = device_price - down_payment;
     let payment_cycle_amount;
     let next_payment_date = new Date();
@@ -51,11 +58,11 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
         break;
     }
 
-    const loanStatus = req.user.role === 'admin' ? 'active' : 'pending'; // Determine status based on user role
+    const loanStatus = req.user.role === 'admin' ? 'active' : 'active'; // Determine status based on user role
 
     const newLoan = await query(
-      'INSERT INTO loans (customer_id, device_id, total_amount, amount_paid, balance, term_months, monthly_payment, down_payment, next_payment_date, guarantor_details, agent_id, status, payment_frequency, payment_cycle_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;',
-      [customer_id, device_id, total_amount, down_payment, total_amount, term_months, payment_cycle_amount, down_payment, next_payment_date, guarantor_details, agent_id, loanStatus, payment_frequency, payment_cycle_amount]
+      'INSERT INTO loans (customer_id, device_id, total_amount, amount_paid, balance, term_months, payment_amount_per_cycle, down_payment, next_payment_date, guarantor_details, agent_id, status, payment_frequency, payment_cycle_amount) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *;',
+      [customer_id, device_id, total_amount, down_payment, total_amount, term_months, payment_cycle_amount, down_payment, next_payment_date, guarantor_details, agent_id ?? req.user.id, loanStatus, payment_frequency, payment_cycle_amount]
     );
 
     res.json({ msg: 'Loan created successfully', loan: newLoan.rows[0] });
@@ -67,7 +74,7 @@ router.post('/', auth, authorize('admin', 'agent'), async (req, res) => {
       SET status = 'assigned', customer_id = $1, install_date = $2, assigned_by = $3
       WHERE id = $4
     `,
-      [customer_id, next_payment_date, agent_id, device_id]
+      [customer_id, next_payment_date, req.user.id, device_id]
     );
   } catch (err) {
     console.error(err.message);
@@ -88,7 +95,7 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
         (l.amount_paid / l.total_amount) * 100 AS payment_progress,
         l.status,
         l.next_payment_date AS next_payment,
-        l.monthly_payment
+        l.payment_cycle_amount
       FROM loans l
       JOIN users u ON l.customer_id = u.id
       ORDER BY l.id ASC
@@ -118,7 +125,7 @@ router.get('/:id', auth, async (req, res) => {
         l.start_date AS "startDate",
         l.end_date AS "endDate",
         l.next_payment_date AS "nextPaymentDate",
-        l.monthly_payment AS "monthlyPayment",
+        l.payment_cycle_amount AS "paymentAmountPerCycle",
         l.down_payment AS "downPayment",
         l.term_months AS "termMonths",
         l.guarantor_details AS "guarantorDetails",
@@ -235,20 +242,31 @@ router.put('/:id', auth, authorize('admin', 'agent'), async (req, res) => {
     total_amount = total_amount !== undefined ? total_amount : existingLoan.total_amount;
     term_months = term_months !== undefined ? term_months : existingLoan.term_months;
 
-    // Recalculate monthly_payment
-    const monthly_payment = total_amount / term_months;
+        // Recalculate payment_amount_per_cycle based on payment_frequency
+    let payment_amount_per_cycle;
+    switch (existingLoan.payment_frequency) {
+      case 'daily':
+        payment_amount_per_cycle = total_amount / (term_months * 30.4375);
+        break;
+      case 'weekly':
+        payment_amount_per_cycle = total_amount / (term_months * 4.3482);
+        break;
+      default: // monthly
+        payment_amount_per_cycle = total_amount / term_months;
+        break;
+    }
 
     const updatedLoan = await query(
       `UPDATE loans SET
         total_amount = COALESCE($1, total_amount),
         term_months = COALESCE($2, term_months),
-        monthly_payment = $3,
+        payment_amount_per_cycle = $3,
         status = COALESCE($4, status),
         next_payment_date = COALESCE($5, next_payment_date),
         guarantor_details = COALESCE($6, guarantor_details),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $7 RETURNING *`,
-      [total_amount, term_months, monthly_payment, status, next_payment_date, guarantor_details, id]
+      [total_amount, term_months, payment_amount_per_cycle, status, next_payment_date, guarantor_details, id]
     );
 
     res.json({ msg: 'Loan updated successfully', loan: updatedLoan.rows[0] });

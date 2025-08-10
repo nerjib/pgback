@@ -6,10 +6,24 @@ const { query } = require('../config/database');
 const axios = require('axios');
 const { handleSuccessfulPayment } = require('../services/paymentService');
 
+
+// @route   GET api/payments
+// @desc    Get all payments
+// @access  Private (Admin)
+router.get('/', auth, authorize('admin'), async (req, res) => {
+  try {
+    const payments = await query('SELECT p.*, u.username as customer FROM payments p JOIN users u ON p.user_id = u.id ORDER BY p.payment_date DESC');
+    res.json(payments.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 // @route   POST api/payments/manual
 // @desc    Record a manual payment (Admin only)
 // @access  Private (Admin)
-router.post('/manual', auth, authorize('admin'), async (req, res) => {
+router.post('/manual', auth, authorize('admin', 'super-agent'), async (req, res) => {
   const { user_id, amount, currency, payment_method, transaction_id, loan_id } = req.body;
 
     if (!loan_id) {

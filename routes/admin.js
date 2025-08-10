@@ -9,7 +9,7 @@ const { query } = require('../config/database');
 // @desc    Create a new agent
 // @access  Private (Admin, Super-Agent)
 router.post('/create-agent', auth, authorize('admin', 'super-agent'), async (req, res) => {
-  const { username, email, password, phone_number, state, city, address, landmark, gps } = req.body;
+  const { username, email, password, phone_number, state, city, address, landmark, gps, name } = req.body;
 
   try {
     let user = await query('SELECT * FROM users WHERE username = $1 OR email = $2', [username, email]);
@@ -23,8 +23,8 @@ router.post('/create-agent', auth, authorize('admin', 'super-agent'), async (req
     const superAgentId = req.user.role === 'super-agent' ? req.user.id : null;
 
     const newAgent = await query(
-      'INSERT INTO users (username, email, password, role, phone_number, state, city, address, landmark, gps, super_agent_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, username, email, role, phone_number, state, city, address, landmark, gps, super_agent_id',
-      [username, email, hashedPassword, 'agent', phone_number, state, city, address, landmark, gps, superAgentId]
+      'INSERT INTO users (username, email, password, role, phone_number, state, city, address, landmark, gps, super_agent_id, name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id, username, email, role, phone_number, state, city, address, landmark, gps, super_agent_id, name',
+      [username, email, hashedPassword, 'agent', phone_number, state, city, address, landmark, gps, superAgentId, name]
     );
 
     res.json({ msg: 'Agent created successfully', agent: newAgent.rows[0] });
@@ -173,6 +173,41 @@ router.put('/settings/commission', auth, authorize('admin'), async (req, res) =>
   }
 });
 
-// Add more admin-specific routes here (e.g., manage devices, view analytics)
+// @route   PUT api/admin/assign-device-to-super-agent
+// @desc    Assign a device to a super-agent
+// @access  Private (Admin only)
+router.put('/assign-device-to-super-agent', auth, authorize('admin'), async (req, res) => {
+  const { deviceId, superAgentId } = req.body;
+
+  try {
+    // Validate input
+    if (!deviceId || !superAgentId) {
+      return res.status(400).json({ msg: 'Device ID and Super-Agent ID are required.' });
+    }
+
+    // Check if device exists
+    const device = await query('SELECT id FROM devices WHERE id = $1', [deviceId]);
+    if (device.rows.length === 0) {
+      return res.status(404).json({ msg: 'Device not found.' });
+    }
+
+    // Check if super-agent exists and has the role 'super-agent'
+    const superAgent = await query(`SELECT id FROM users WHERE id = $1 AND role = 'super-agent'`, [superAgentId]);
+    if (superAgent.rows.length === 0) {
+      return res.status(404).json({ msg: 'Super-agent not found or is not a super-agent.' });
+    }
+
+    // Assign device to super-agent
+    const updatedDevice = await query(
+      'UPDATE devices SET super_agent_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *;',
+      [superAgentId, deviceId]
+    );
+
+    res.json({ msg: 'Device assigned successfully', device: updatedDevice.rows[0] });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
 
 module.exports = router;

@@ -91,7 +91,7 @@ router.get('/:id', auth, async (req, res) => {
           'totalAmount', l.total_amount,
           'paidAmount', l.amount_paid,
           'remainingAmount', l.balance,
-          'monthlyPayment', l.monthly_payment,
+          'paymentAmountPerCycle', l.payment_amount_per_cycle,
           'startDate', l.start_date,
           'endDate', l.end_date,
           'status', l.status,
