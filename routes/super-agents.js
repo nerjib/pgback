@@ -465,4 +465,91 @@ router.post('/withdraw-commission', auth, authorize('super-agent', 'admin'), asy
   }
 });
 
+// @route   GET api/super-agents/messages
+// @desc    Get all messages/notifications for the current super-agent
+// @access  Private (Super-Agent only)
+router.get('/messages', auth, authorize('super-agent'), async (req, res) => {
+  try {
+    const superAgentId = req.user.id;
+    // Fetch messages where the super-agent is either the sender or the receiver
+    const messages = await query(`
+      SELECT
+        m.id,
+        m.sender_id,
+        s.username AS sender_name,
+        m.receiver_id,
+        r.username AS receiver_name,
+        m.message_type,
+        m.content,
+        m.read_status,
+        m.created_at,
+        m.parent_message_id
+      FROM messages m
+      LEFT JOIN users s ON m.sender_id = s.id
+      LEFT JOIN users r ON m.receiver_id = r.id
+      WHERE m.receiver_id = $1 OR m.sender_id = $1
+      ORDER BY m.created_at DESC
+    `, [superAgentId]);
+    res.json(messages.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   POST api/super-agents/messages
+// @desc    Send a message/reply from the super-agent
+// @access  Private (Super-Agent only)
+router.post('/messages', auth, authorize('super-agent'), async (req, res) => {
+  const { receiver_id, message_type, content, parent_message_id } = req.body;
+  const sender_id = req.user.id;
+
+  try {
+    // Basic validation
+    if (!receiver_id || !content) {
+      return res.status(400).json({ msg: 'Receiver ID and content are required.' });
+    }
+
+    // Check if receiver exists
+    const receiver = await query('SELECT id FROM users WHERE id = $1', [receiver_id]);
+    if (receiver.rows.length === 0) {
+      return res.status(404).json({ msg: 'Receiver not found.' });
+    }
+
+    const newMessage = await query(
+      'INSERT INTO messages (sender_id, receiver_id, message_type, content, parent_message_id) VALUES ($1, $2, $3, $4, $5) RETURNING *;',
+      [sender_id, receiver_id, message_type || 'message', content, parent_message_id || null]
+    );
+
+    res.json({ msg: 'Message sent successfully', message: newMessage.rows[0] });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   PUT api/super-agents/messages/:id/read
+// @desc    Mark a message as read
+// @access  Private (Super-Agent only)
+router.put('/messages/:id/read', auth, authorize('super-agent'), async (req, res) => {
+  const { id } = req.params;
+  const superAgentId = req.user.id;
+
+  try {
+    const updatedMessage = await query(
+      'UPDATE messages SET read_status = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND receiver_id = $2 RETURNING *;',
+      [id, superAgentId]
+    );
+
+    if (updatedMessage.rows.length === 0) {
+      return res.status(404).json({ msg: 'Message not found or you are not the receiver.' });
+    }
+
+    res.json({ msg: 'Message marked as read', message: updatedMessage.rows[0] });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 module.exports = router;
