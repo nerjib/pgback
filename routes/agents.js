@@ -50,6 +50,125 @@ router.get('/me', auth, authorize('agent', 'admin'), async (req, res) => {
   }
 });
 
+// @route   GET api/agents/dashboard
+// @desc    Get agent dashboard data
+// @access  Private (Agent only)
+router.get('/dashboard', auth, authorize('agent'), async (req, res) => {
+  try {
+    const agentId = req.user.id;
+
+    // Total Customers managed by this agent
+    const totalCustomersResult = await query(
+      'SELECT COUNT(*) FROM users WHERE created_by = $1 AND role = $2',
+      [agentId, 'customer']
+    );
+    const totalCustomers = parseInt(totalCustomersResult.rows[0].count, 10);
+
+    // Total Loans created by this agent
+    const totalLoansResult = await query(
+      'SELECT COUNT(*) FROM loans WHERE agent_id = $1',
+      [agentId]
+    );
+    const totalLoans = parseInt(totalLoansResult.rows[0].count, 10);
+
+    // Total Payments Collected by this agent
+    const totalPaymentsCollectedResult = await query(
+      'SELECT COALESCE(SUM(p.amount), 0) AS total_payments FROM payments p JOIN loans l ON p.loan_id = l.id WHERE l.agent_id = $1',
+      [agentId]
+    );
+    const totalPaymentsCollected = parseFloat(totalPaymentsCollectedResult.rows[0].total_payments).toFixed(2);
+
+    // Total Commissions Earned by this agent
+    const totalCommissionsEarnedResult = await query(
+      'SELECT COALESCE(SUM(amount), 0) AS total_commissions FROM commissions WHERE agent_id = $1',
+      [agentId]
+    );
+    const totalCommissionsEarned = parseFloat(totalCommissionsEarnedResult.rows[0].total_commissions).toFixed(2);
+
+    res.json({
+      totalCustomers,
+      totalLoans,
+      totalPaymentsCollected,
+      totalCommissionsEarned,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   GET api/agents/customers
+// @desc    Get customers onboarded by the current agent
+// @access  Private (Agent only)
+router.get('/customers', auth, authorize('agent'), async (req, res) => {
+  try {
+    const agentId = req.user.id;
+    const customers = await query(`
+      SELECT 
+        id, 
+        username AS name, 
+        phone_number AS phone, 
+        state AS region, 
+        status,
+        (SELECT username FROM users WHERE id = u.created_by) AS "onboardedBy"
+      FROM users u
+      WHERE created_by = $1 AND role = 'customer'
+    `, [agentId]);
+    res.json(customers.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   GET api/agents/devices
+// @desc    Get devices assigned by the current agent
+// @access  Private (Agent only)
+router.get('/devices', auth, authorize('agent'), async (req, res) => {
+  try {
+    const agentId = req.user.id;
+    const devices = await query(`
+      SELECT 
+        id, 
+        serial_number AS "serialNumber", 
+        status, 
+        model as type, 
+        model,
+        assigned_to AS "assignedToCustomerId",
+        (SELECT username FROM users WHERE id = d.assigned_to) AS "assignedToCustomerName"
+      FROM devices d
+      WHERE assigned_by = $1
+    `, [agentId]);
+    res.json(devices.rows);
+    console.log(devices.rows[0])
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
+// @route   GET api/agents/available-devices
+// @desc    Get available devices for assignment by the current agent
+// @access  Private (Agent only)
+router.get('/available-devices', auth, authorize('agent'), async (req, res) => {
+  try {
+    const agentId = req.user.id; // Get the ID of the authenticated agent
+    const devices = await query(`
+      SELECT 
+        id, 
+        serial_number AS "serialNumber", 
+        model as type, 
+        model
+      FROM devices
+      WHERE status = 'available' AND assigned_by = $1
+    `, [agentId]); // Filter by agent's ID (assuming assigned_to temporarily holds agent's ID)
+    res.json(devices.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 // @route   POST api/agents/assign-device
 // @desc    Assign a device to a customer
 // @access  Private (Agent and Admin only)
